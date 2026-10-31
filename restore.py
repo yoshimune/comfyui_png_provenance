@@ -11,14 +11,14 @@ else:
     from png_bundle import read_png_bundle
 
 
-def restore_png(png_path, output_dir):
-    manifest, files = read_png_bundle(png_path)
+def prepare_restore(manifest, files, image_prefix="assets"):
     prompt = copy.deepcopy(manifest["graph"])
     workflow = copy.deepcopy(manifest["workflow"])
     warnings = []
     references = []
     contents = {}
     workflow_nodes = {}
+    mapped_sources = {}
     if workflow is not None:
         if isinstance(workflow.get("nodes"), list):
             for node in workflow["nodes"]:
@@ -31,17 +31,21 @@ def restore_png(png_path, output_dir):
         else:
             warnings.append("Editor workflow has no top-level node list; restore its image references manually.")
     for asset in manifest["assets"]:
-        filename = f"assets/{asset['sha256']}{asset['extension']}"
-        contents[filename] = files[asset["entry"]]
+        basename = f"{asset['sha256']}{asset['extension']}"
+        filename = f"{image_prefix}/{basename}"
+        contents[f"assets/{basename}"] = files[asset["entry"]]
         for ref in asset["references"]:
             references.append({**ref, "restored_filename": filename})
-            node_id = ref["prompt_node_id"]
+            node_id = ref.get("prompt_node_id")
             if node_id is None:
                 warnings.append(f"Runtime source {ref['node_id']} has no direct editor/API node; restore {filename} manually.")
                 continue
             node = prompt.get(node_id)
             if node is None or node["class_type"] != ref["class_type"]:
                 raise ValueError(f"Invalid API source reference in provenance: {node_id}")
+            if node_id in mapped_sources and mapped_sources[node_id] != filename:
+                raise ValueError(f"Conflicting embedded source references: {node_id}")
+            mapped_sources[node_id] = filename
             node["inputs"][ref["input"]] = filename
             if workflow is not None:
                 editor_node = workflow_nodes.get(node_id)
@@ -52,14 +56,10 @@ def restore_png(png_path, output_dir):
                     editor_node["widgets_values"][0] = filename
                 else:
                     warnings.append(f"Editor source {node_id} could not be mapped; select {filename} manually.")
-    contents["prompt.json"] = json.dumps(prompt, ensure_ascii=False, indent=2).encode("utf-8")
-    if workflow is not None:
-        contents["workflow.original.json"] = json.dumps(manifest["workflow"], ensure_ascii=False, indent=2).encode("utf-8")
-        contents["workflow.json"] = json.dumps(workflow, ensure_ascii=False, indent=2).encode("utf-8")
-    contents["references.json"] = json.dumps({
-        "references": references, "warnings": warnings, "output": manifest["output"],
-        "image_placement": "Copy the restored assets directory into ComfyUI's input directory.",
-    }, ensure_ascii=False, indent=2).encode("utf-8")
+    return prompt, workflow, references, warnings, contents
+
+
+def write_restored_files(output_dir, contents):
     root = Path(output_dir).resolve()
     targets = []
     for name, data in contents.items():
@@ -69,13 +69,45 @@ def restore_png(png_path, output_dir):
         if os.path.lexists(target):
             raise FileExistsError(f"Refusing to overwrite restored file: {target}")
         targets.append((target, data))
-    root.mkdir(parents=True, exist_ok=True)
-    for target, data in targets:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if not target.resolve().is_relative_to(root):
-            raise ValueError(f"Restore path is outside the destination: {target}")
-        with open(target, "xb") as stream:
-            stream.write(data)
+    created = []
+    directories = []
+    try:
+        if not root.exists():
+            root.mkdir(parents=True)
+            directories.append(root)
+        for target, data in targets:
+            if not target.parent.exists():
+                target.parent.mkdir()
+                directories.append(target.parent)
+            if not target.resolve().is_relative_to(root):
+                raise ValueError(f"Restore path is outside the destination: {target}")
+            with open(target, "xb") as stream:
+                created.append(target)
+                stream.write(data)
+    except (OSError, ValueError):
+        for path in list(reversed(created)) + list(reversed(directories)):
+            try:
+                if path in directories:
+                    path.rmdir()
+                else:
+                    path.unlink()
+            except OSError:
+                logging.exception("Could not remove incomplete restoration path: %s", path)
+        raise
+
+
+def restore_png(png_path, output_dir):
+    manifest, files = read_png_bundle(png_path)
+    prompt, workflow, references, warnings, contents = prepare_restore(manifest, files)
+    contents["prompt.json"] = json.dumps(prompt, ensure_ascii=False, indent=2).encode("utf-8")
+    if workflow is not None:
+        contents["workflow.original.json"] = json.dumps(manifest["workflow"], ensure_ascii=False, indent=2).encode("utf-8")
+        contents["workflow.json"] = json.dumps(workflow, ensure_ascii=False, indent=2).encode("utf-8")
+    contents["references.json"] = json.dumps({
+        "references": references, "warnings": warnings, "output": manifest["output"],
+        "image_placement": "Copy the restored assets directory into ComfyUI's input directory.",
+    }, ensure_ascii=False, indent=2).encode("utf-8")
+    write_restored_files(output_dir, contents)
     return warnings
 
 

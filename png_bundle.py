@@ -107,38 +107,42 @@ def decode_bundle(data):
 
 
 def read_png_bundle(path):
-    bundle = None
     with open(path, "rb") as stream:
-        if stream.read(8) != PNG_SIGNATURE:
-            raise ValueError("Not a PNG file")
-        while True:
-            header = stream.read(8)
-            if len(header) != 8:
-                raise ValueError("Truncated PNG chunk header")
-            length, chunk_type = struct.unpack(">I4s", header)
-            if length > 0x7fffffff:
-                raise ValueError("Invalid PNG chunk length")
+        return read_png_bundle_stream(stream)
+
+
+def read_png_bundle_stream(stream):
+    bundle = None
+    if stream.read(8) != PNG_SIGNATURE:
+        raise ValueError("Not a PNG file")
+    while True:
+        header = stream.read(8)
+        if len(header) != 8:
+            raise ValueError("Truncated PNG chunk header")
+        length, chunk_type = struct.unpack(">I4s", header)
+        if length > 0x7fffffff:
+            raise ValueError("Invalid PNG chunk length")
+        if chunk_type == CHUNK_TYPE:
+            if bundle is not None:
+                raise ValueError("Duplicate PNG provenance chunks")
+            bundle = bytearray()
+        crc = zlib.crc32(chunk_type)
+        remaining = length
+        while remaining:
+            part = stream.read(min(remaining, 1024 * 1024))
+            if not part:
+                raise ValueError("Truncated PNG chunk data")
+            crc = zlib.crc32(part, crc)
             if chunk_type == CHUNK_TYPE:
-                if bundle is not None:
-                    raise ValueError("Duplicate PNG provenance chunks")
-                bundle = bytearray()
-            crc = zlib.crc32(chunk_type)
-            remaining = length
-            while remaining:
-                part = stream.read(min(remaining, 1024 * 1024))
-                if not part:
-                    raise ValueError("Truncated PNG chunk data")
-                crc = zlib.crc32(part, crc)
-                if chunk_type == CHUNK_TYPE:
-                    bundle.extend(part)
-                remaining -= len(part)
-            stored_crc = stream.read(4)
-            if len(stored_crc) != 4 or struct.unpack(">I", stored_crc)[0] != crc:
-                raise ValueError(f"Invalid PNG chunk CRC: {chunk_type!r}")
-            if chunk_type == b"IEND":
-                if length or stream.read(1):
-                    raise ValueError("Invalid PNG ending")
-                break
+                bundle.extend(part)
+            remaining -= len(part)
+        stored_crc = stream.read(4)
+        if len(stored_crc) != 4 or struct.unpack(">I", stored_crc)[0] != crc:
+            raise ValueError(f"Invalid PNG chunk CRC: {chunk_type!r}")
+        if chunk_type == b"IEND":
+            if length or stream.read(1):
+                raise ValueError("Invalid PNG ending")
+            break
     if bundle is None:
         raise ValueError("PNG does not contain a ComfyUI provenance bundle")
     return decode_bundle(bundle)

@@ -13,7 +13,8 @@ image loaders. This keeps the image and its provenance together in one file.
 1. Copy the `comfyui_png_provenance` folder, including its `__init__.py`, into
    your ComfyUI installation's `custom_nodes` folder. The resulting path should
    be `ComfyUI\custom_nodes\comfyui_png_provenance\__init__.py`.
-2. Restart ComfyUI. Refreshing the browser alone does not load a new custom node.
+2. Restart ComfyUI, then refresh the browser to load the frontend extension.
+   Refreshing the browser alone does not load a new custom node.
 3. In your workflow, replace the final Save Image node with **Save Image with
    Provenance**. Connect the final `IMAGE` output to `images`, set
    `filename_prefix`, and queue the workflow.
@@ -76,7 +77,33 @@ there is no assumption that a workflow contains only one sampler.
 Image optimizers, editors, and viewers may discard custom metadata when
 re-saving. Keep the original generated PNG for restoration.
 
-## Restore locally
+## Restore by dragging a PNG into ComfyUI
+
+Drag a PNG saved by this node onto an **empty area of the ComfyUI canvas**.
+The extension restores the embedded input images and builds the saved upstream
+generation graph in the editor in one step. You do not need to run `restore.py`,
+copy images, or load a JSON file separately.
+
+Each drop creates a new `ComfyUI\input\provenance\restore_<id>\assets` directory.
+Existing images are not overwritten or reused. These restored inputs remain on
+disk for the workflow to use. The restored graph uses only the saved upstream
+nodes, with a newly arranged layout, not the unfiltered editor workflow.
+Mapped LoadImageOutput nodes become LoadImage nodes so they can select the
+restored files in the input directory. LoadImageMask channel settings are kept.
+
+Generation is **not queued automatically**. Review the graph, then queue it
+normally. When an expanded/subgraph image cannot be mapped automatically, the
+extension restores its file and displays a warning with the source node and
+restored filename for manual selection. Missing models or custom nodes must
+still be provided separately.
+
+Ordinary PNGs retain their normal loading behavior. Dropping on an image
+loader's upload area is still an image-upload operation, not workflow
+restoration. Invalid provenance produces an error instead of silently loading
+the original workflow. Uploads are sent only to the ComfyUI server currently
+connected to your browser, using its existing upload-size limit.
+
+## Restore with the local CLI
 
 The CLI uses only Python's standard library; it does not require torch or a
 running ComfyUI instance:

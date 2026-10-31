@@ -8,9 +8,14 @@ import folder_paths
 import nodes
 from comfy.cli_args import args
 from comfy_api.latest import ComfyExtension, io, ui
+from server import PromptServer
 
 from .png_bundle import CHUNK_TYPE, FORMAT, VERSION, encode_bundle
 from .provenance import collect_provenance, describe_provenance
+from .restore_api import register_restore_routes
+
+
+WEB_DIRECTORY = "./web"
 
 
 class SaveImageWithProvenance(io.ComfyNode):
@@ -68,6 +73,9 @@ class SaveImageWithProvenance(io.ComfyNode):
 
 
 class ProvenanceExtension(ComfyExtension):
+    async def on_load(self):
+        register_restore_routes(PromptServer.instance.routes)
+
     async def get_node_list(self):
         return [SaveImageWithProvenance]
 
