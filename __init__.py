@@ -74,7 +74,7 @@ class SaveImageWithProvenance(io.ComfyNode):
 
 class ProvenanceExtension(ComfyExtension):
     async def on_load(self):
-        register_restore_routes(PromptServer.instance.routes)
+        register_restore_routes(PromptServer.instance.routes, PromptServer.instance.sockets)
 
     async def get_node_list(self):
         return [SaveImageWithProvenance]

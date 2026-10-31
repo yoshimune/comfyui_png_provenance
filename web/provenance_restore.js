@@ -24,9 +24,74 @@ export async function hasProvenance(file) {
     return false;
 }
 
+async function fetchResult(route, options) {
+    const response = await api.fetchApi(route, options);
+    if (!response.ok) {
+        const text = await response.text();
+        let message = text;
+        try {
+            message = JSON.parse(text).error ?? text;
+        } catch (error) {
+            if (!(error instanceof SyntaxError)) {
+                throw error;
+            }
+        }
+        throw new Error(`Provenance request failed (${response.status}): ${message}`);
+    }
+    return response.json();
+}
+
+function showFailure(error, summary = "Could not restore PNG provenance") {
+    app.extensionManager.toast.add({
+        severity: "error", summary, detail: error.message, life: 30000,
+    });
+}
+
 app.registerExtension({
     name: "ComfyUI.PNGProvenance.Restore",
     setup() {
+        let loadQueue = Promise.resolve();
+        const loadRestored = (result, name, options) => {
+            loadQueue = loadQueue.then(async () => {
+                try {
+                    await app.loadApiJson(result.prompt, name, options);
+                    if (result.warnings.length) {
+                        app.extensionManager.toast.add({
+                            severity: "warn",
+                            summary: "Provenance restored; manual image selection required",
+                            detail: result.warnings.join("\n"),
+                            life: 30000,
+                        });
+                    }
+                } catch (error) {
+                    showFailure(error);
+                }
+            });
+            return loadQueue;
+        };
+        api.addEventListener("provenance.restored", (event) => {
+            return loadRestored(event.detail, event.detail.name);
+        });
+
+        const registerBrowser = async () => {
+            const clientId = api.clientId;
+            if (!clientId) {
+                return;
+            }
+            try {
+                await fetchResult("/provenance/clients/register", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ client_id: clientId }),
+                });
+            } catch (error) {
+                showFailure(error, "Could not register PNG provenance browser");
+            }
+        };
+        // This handshake also runs on explicit socket replacements without a reconnected event.
+        api.addEventListener("feature_flags", registerBrowser);
+        registerBrowser();
+
         const originalHandleFile = app.handleFile;
         app.handleFile = async function (file, openSource, options) {
             if (openSource !== "file_drop") {
@@ -38,36 +103,10 @@ app.registerExtension({
                 }
                 const body = new FormData();
                 body.append("image", file);
-                const response = await api.fetchApi("/provenance/restore", { method: "POST", body });
-                if (!response.ok) {
-                    const text = await response.text();
-                    let message = text;
-                    try {
-                        message = JSON.parse(text).error ?? text;
-                    } catch (error) {
-                        if (!(error instanceof SyntaxError)) {
-                            throw error;
-                        }
-                    }
-                    throw new Error(`Provenance restoration failed (${response.status}): ${message}`);
-                }
-                const result = await response.json();
-                await this.loadApiJson(result.prompt, file.name.replace(/\.png$/i, ""), options);
-                if (result.warnings.length) {
-                    app.extensionManager.toast.add({
-                        severity: "warn",
-                        summary: "Provenance restored; manual image selection required",
-                        detail: result.warnings.join("\n"),
-                        life: 30000,
-                    });
-                }
+                const result = await fetchResult("/provenance/restore", { method: "POST", body });
+                await loadRestored(result, file.name.replace(/\.png$/i, ""), options);
             } catch (error) {
-                app.extensionManager.toast.add({
-                    severity: "error",
-                    summary: "Could not restore PNG provenance",
-                    detail: error.message,
-                    life: 30000,
-                });
+                showFailure(error);
             }
         };
     },

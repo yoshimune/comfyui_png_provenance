@@ -103,6 +103,39 @@ restoration. Invalid provenance produces an error instead of silently loading
 the original workflow. Uploads are sent only to the ComfyUI server currently
 connected to your browser, using its existing upload-size limit.
 
+## Restore from an external tool into a browser
+
+The frontend extension registers its WebSocket connection when ready and
+registers again after reconnecting. List these connected, registered browsers
+and choose the target `client_id`:
+
+```powershell
+curl.exe http://127.0.0.1:8188/provenance/clients
+curl.exe -X POST http://127.0.0.1:8188/provenance/restore -F "image=@C:\images\generated.png" -F "client_id=TARGET_CLIENT_ID"
+```
+
+The list response is `{"clients":[{"client_id":"..."}]}`. The restore endpoint
+places the inputs, then sends a `provenance.restored` event only to the chosen
+browser. Its canvas loads the upstream graph directly, without a page reload or
+automatic generation. Warnings about manual image selection appear there too.
+
+Successful responses include `notification: {"client_id":"...", "status":"sent"}`.
+This confirms the WebSocket send, **not completion of the browser's graph
+import**. Graph-loading failures are shown in the browser. If the target is
+disconnected or unregistered, the endpoint returns 409 before restoring images.
+If it disconnects during restoration or notification fails, the endpoint returns
+409 with `error`, the restored results and `directory`, and
+`notification.status` set to `failed`. Restored images remain on disk.
+
+Omit `client_id` to get the previous response-only behavior. Ordinary PNG
+drag-and-drop does not send `client_id`, so it does not load a workflow twice.
+The browser-only `POST /provenance/clients/register` accepts JSON with
+`client_id`; external tools normally need only the list and restore endpoints.
+
+A client ID and readiness registration are **not authentication**. Use this
+feature only with trusted callers under your existing ComfyUI access controls.
+Do not expose an unauthenticated ComfyUI server to the internet.
+
 ## Restore with the local CLI
 
 The CLI uses only Python's standard library; it does not require torch or a
