@@ -51,9 +51,17 @@ app.registerExtension({
     name: "ComfyUI.PNGProvenance.Restore",
     setup() {
         let loadQueue = Promise.resolve();
-        const loadRestored = (result, name, options) => {
+        const loadRestored = (result, name, options, newWorkflow = false) => {
             loadQueue = loadQueue.then(async () => {
                 try {
+                    if (newWorkflow) {
+                        const workflows = app.extensionManager.workflow.workflows;
+                        const baseName = name;
+                        let suffix = 2;
+                        while (workflows.some((workflow) => workflow.fullFilename === `${name}.json`)) {
+                            name = `${baseName} (${suffix++})`;
+                        }
+                    }
                     await app.loadApiJson(result.prompt, name, options);
                     if (result.warnings.length) {
                         app.extensionManager.toast.add({
@@ -70,7 +78,7 @@ app.registerExtension({
             return loadQueue;
         };
         api.addEventListener("provenance.restored", (event) => {
-            return loadRestored(event.detail, event.detail.name);
+            return loadRestored(event.detail, event.detail.name, undefined, true);
         });
 
         const registerBrowser = async () => {

@@ -116,8 +116,11 @@ curl.exe -X POST http://127.0.0.1:8188/provenance/restore -F "image=@C:\images\g
 
 The list response is `{"clients":[{"client_id":"..."}]}`. The restore endpoint
 places the inputs, then sends a `provenance.restored` event only to the chosen
-browser. Its canvas loads the upstream graph directly, without a page reload or
-automatic generation. Warnings about manual image selection appear there too.
+browser. Each call loads the upstream graph into a new workflow tab and selects
+it, keeping existing tabs and unsaved edits. Existing workflow names receive a
+numbered suffix. PNG drag-and-drop retains its existing replacement behavior.
+No page reload or automatic generation occurs. Warnings about manual image
+selection appear in the browser too.
 
 Successful responses include `notification: {"client_id":"...", "status":"sent"}`.
 This confirms the WebSocket send, **not completion of the browser's graph
