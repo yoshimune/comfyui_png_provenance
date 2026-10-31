@@ -1,8 +1,18 @@
 # Save Image with Provenance
 
-生成条件と入力画像の元ファイルを出力画像に含める場合は、Save Image の代わりに **Save Image with Provenance** を使用してください。最終的な IMAGE を `images` に接続し、`filename_prefix` を設定してワークフローを実行します。このディレクトリを `custom_nodes` に配置した後、ComfyUI を再起動してください。
+## ノードの役割と機能
 
-バッチ内の各画像を含め、出力は通常の PNG です。サイドカーファイル、ネットワークリクエスト、モデルのダウンロードは発生せず、標準の保存動作にも変更はありません。このノードを使用するには `--disable-metadata` を外してください。
+**Save Image with Provenance** は、Save Image と同様に生成画像を PNG として保存し、生成情報を各 PNG に埋め込む出力ノードです。上流の生成グラフ、利用可能な場合は編集用ワークフロー、生成条件の読みやすい説明、対応画像ローダーが使用した元ファイルを記録します。画像と生成情報をひとつのファイルにまとめられます。
+
+## ComfyUI に追加して使う
+
+1. `__init__.py` を含む `comfyui_png_provenance` フォルダーを、ComfyUI のインストール先にある `custom_nodes` フォルダーへコピーします。配置後のパスが `ComfyUI\custom_nodes\comfyui_png_provenance\__init__.py` になるようにしてください。
+2. ComfyUI を再起動します。ブラウザーの再読み込みだけでは、新しいカスタムノードは読み込まれません。
+3. ワークフローの最後にある Save Image ノードを **Save Image with Provenance** に置き換えます。最終段の `IMAGE` 出力を `images` に接続し、`filename_prefix` を設定してワークフローを実行してください。
+
+ノードが表示されない場合は、ComfyUI の起動ログでカスタムノードの読み込みエラーを確認してください。`--disable-metadata` を指定している場合は、解除してから使用してください。
+
+バッチ内の各画像を含め、出力は通常の PNG です。サイドカーファイル、ネットワークリクエスト、モデルのダウンロードは発生せず、標準の保存動作にも変更はありません。
 
 ## 記録される内容
 

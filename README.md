@@ -1,13 +1,28 @@
 # Save Image with Provenance
 
-Use **Save Image with Provenance** instead of Save Image when the output should
-contain its generation settings and original input image files. Connect the final
-IMAGE to `images`, set `filename_prefix`, and queue the workflow. Restart ComfyUI
-after placing this directory in `custom_nodes`.
+## Purpose
+
+**Save Image with Provenance** is an output node that saves generated images as
+PNG files, like Save Image, and embeds provenance in each PNG. It records the
+upstream generation graph, the editor workflow when available, a readable
+description of generation settings, and the original files used by supported
+image loaders. This keeps the image and its provenance together in one file.
+
+## Add the node to ComfyUI
+
+1. Copy the `comfyui_png_provenance` folder, including its `__init__.py`, into
+   your ComfyUI installation's `custom_nodes` folder. The resulting path should
+   be `ComfyUI\custom_nodes\comfyui_png_provenance\__init__.py`.
+2. Restart ComfyUI. Refreshing the browser alone does not load a new custom node.
+3. In your workflow, replace the final Save Image node with **Save Image with
+   Provenance**. Connect the final `IMAGE` output to `images`, set
+   `filename_prefix`, and queue the workflow.
+
+If the node does not appear, check the ComfyUI startup log for custom-node
+loading errors. `--disable-metadata` must be removed to use this node.
 
 Each output is a normal PNG, including each image of a batch. No sidecar files,
 network requests, model downloads, or changes to standard saving are involved.
-`--disable-metadata` must be removed to use this node.
 
 ## What is recorded
 
