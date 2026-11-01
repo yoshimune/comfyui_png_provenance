@@ -25,6 +25,29 @@ loading errors. `--disable-metadata` must be removed to use this node.
 Each output is a normal PNG, including each image of a batch. No sidecar files,
 network requests, model downloads, or changes to standard saving are involved.
 
+## Outputs and Eagle connection
+
+Saving and previews remain unchanged. The node also outputs one item per image
+on each of these three list sockets, in matching batch order:
+
+| Output | Type and contents | Send Image to Eagle input |
+|---|---|---|
+| `PNG data` (`png_data`) | `PNG_DATA`: complete saved PNG bytes, including embedded input files and metadata | `png_data` |
+| `filename` | `STRING`: saved filename, including extension and counter | `name` |
+| `Description` (`description`) | `STRING`: exactly the PNG's Description text | `annotation` |
+
+Install or update `custom_nodes\comfyui_to_eagle`, restart ComfyUI and refresh
+the browser, then connect these sockets to **Send Image to Eagle**. Convert its
+`name` and `annotation` widgets to inputs to connect the string outputs.
+ComfyUI maps the aligned lists to separate sends for every image. PNG input
+takes priority over `images` and is not re-encoded, preserving provenance.
+The saved output files remain after sending.
+
+`PNG_DATA` is not an `IMAGE` tensor. Connecting an ordinary IMAGE to the sender
+creates a new PNG without this metadata. Complete PNG bytes, including embedded
+input files, are held as node outputs while retained by ComfyUI's execution
+cache, increasing memory use.
+
 ## What is recorded
 
 - `prompt`: the saving node and its connected upstream generation graph.
@@ -33,7 +56,7 @@ network requests, model downloads, or changes to standard saving are involved.
   graph to use for analysis.
 - `Description`: readable generation settings and an input-file inventory.
   Unicode, including Japanese prompts, is preserved. Viewer support for this
-  field varies; Eagle integration is not included.
+  field varies; the separate Eagle sender can receive it as `annotation`.
 - Original file bytes used by standard **LoadImage**, **LoadImageMask** and
   **LoadImageOutput**, deduplicated by SHA-256 within the save call.
 

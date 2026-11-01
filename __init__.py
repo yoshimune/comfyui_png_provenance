@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+from io import BytesIO
 
 from PIL.PngImagePlugin import PngInfo
 
@@ -30,6 +31,11 @@ class SaveImageWithProvenance(io.ComfyNode):
                 io.Image.Input("images"),
                 io.String.Input("filename_prefix", default="ComfyUI"),
             ],
+            outputs=[
+                io.Custom("PNG_DATA").Output("png_data", display_name="PNG data", is_output_list=True),
+                io.String.Output("filename", is_output_list=True),
+                io.String.Output("description", display_name="Description", is_output_list=True),
+            ],
             hidden=[io.Hidden.prompt, io.Hidden.extra_pnginfo, io.Hidden.unique_id, io.Hidden.dynprompt],
             is_output_node=True,
         )
@@ -51,6 +57,9 @@ class SaveImageWithProvenance(io.ComfyNode):
             filename_prefix, folder_paths.get_output_directory(), images[0].shape[1], images[0].shape[0],
         )
         results = []
+        png_data = []
+        filenames = []
+        descriptions = []
         for batch_index, image in enumerate(images):
             item = copy.copy(manifest)
             item["output"] = {
@@ -59,17 +68,24 @@ class SaveImageWithProvenance(io.ComfyNode):
             }
             metadata = PngInfo()
             metadata.add_text("ComfyProvenanceFormat", f"{FORMAT}/{VERSION}")
-            metadata.add_itxt("Description", describe_provenance(item))
+            description = describe_provenance(item)
+            metadata.add_itxt("Description", description)
             metadata.add_text("prompt", json.dumps(item["graph"]))
             if workflow is not None:
                 metadata.add_text("workflow", json.dumps(workflow))
             metadata.add(CHUNK_TYPE, encode_bundle(item, files), after_idat=True)
             file = f"{filename.replace('%batch_num%', str(batch_index))}_{counter:05}_.png"
-            img = ui.ImageSaveHelper._convert_tensor_to_pil(image)
-            img.save(os.path.join(folder, file), pnginfo=metadata, compress_level=4)
+            with ui.ImageSaveHelper._convert_tensor_to_pil(image) as img, BytesIO() as buffer:
+                img.save(buffer, format="PNG", pnginfo=metadata, compress_level=4)
+                data = buffer.getvalue()
+            with open(os.path.join(folder, file), "wb") as output:
+                output.write(data)
+            png_data.append(data)
+            filenames.append(file)
+            descriptions.append(description)
             results.append(ui.SavedResult(file, subfolder, io.FolderType.output))
             counter += 1
-        return io.NodeOutput(ui=ui.SavedImages(results))
+        return io.NodeOutput(png_data, filenames, descriptions, ui=ui.SavedImages(results))
 
 
 class ProvenanceExtension(ComfyExtension):
